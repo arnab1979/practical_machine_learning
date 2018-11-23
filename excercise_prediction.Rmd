@@ -1,0 +1,142 @@
+---
+title: "EXCERCISE PREDICTION"
+author: "Arnab Sanyal"
+date: "November 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+## Goal
+
+The goal of this project is to build a model to predict the manner in which they did the exercise. 
+
+## Data Source
+
+The training data for this project has been downloaded from:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data has been downloaded from:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv 
+
+```{r echo = FALSE, cache = TRUE, include = FALSE}
+
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "C:/Arnab/R/practical_machine_learning/data/pml-training.csv"
+testFile <- "C:/Arnab/R/practical_machine_learning/data/pml-testing.csv"
+
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile, method="curl")
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile, method="curl")
+}
+
+trainData <- read.csv(trainFile)
+testData <- read.csv(testFile)
+```
+
+
+
+## Data Cleansing
+
+A careful observation of the training and test sets shows multiple variables in each observation have missing values. Hence the variables with more than 90% of missing or blank values can be remove without any impact on prediction outcome. 
+
+```{r }
+indRemoveCol <- which(colSums(is.na(trainData) |trainData =="")>0.9*dim(trainData)[1])
+trainDataNoNA <- trainData[,-indRemoveCol]
+indRemoveCol <- which(colSums(is.na(testData) |testData =="")>0.9*dim(testData)[1])
+testDataNoNA <- testData[,-indRemoveCol]
+```
+
+The first seven columns contain information about the persons who contributed to the survey. Hence these 7 columns can be ommitted as well. 
+
+```{r }
+trainDataClean <- trainDataNoNA[,-c(1:7)]
+testDataClean <- testDataNoNA[,-c(1:7)]
+```
+
+## Data Slicing
+
+Cleaned training data is further divided into a training set and a test set. Training set contains 75% of the samples and test set contains 25%.
+
+```{r }
+set.seed(99999)
+inTrain <- createDataPartition(trainDataClean$classe, p=0.75, list=FALSE)
+trainSubset <- trainDataClean[inTrain,]
+trainTest <- trainDataClean[-inTrain,]
+```
+
+
+## Cross Validation
+
+In order to reduce out of sample prediction error K- fold coross validation is used with K=3 (reasonable turnaround time). 
+
+```{r }
+trControl <- trainControl(method="cv", number=3)
+```
+
+## Model Selection
+
+Here supervised learning technique is required to be used since an inferrence is to be drawn from a given set of data. Since the number of predicted values is very less, decision tree model should be used to predict. Two most powerful decision tree menthods, namely Random Forest and Gradient Tree Boosting are used and there output is compared to select the final one.
+
+### Train with Random Forest
+
+```{r }
+model_RF <- train(classe~., data=trainSubset, method="rf", trControl=trControl, verbose=FALSE)
+print (model_RF)
+plot(model_RF,main="Accuracy of Random Forest model by number of predictors")
+```
+
+#### Prediction with Random Forest
+
+
+```{r }
+predictRF <- predict(model_RF,newdata=trainTest)
+confusionMatrixRF <- confusionMatrix(trainTest$classe,predictRF)
+confusionMatrixRF$table
+confusionMatrixRF$overall[1]
+```
+
+Random Forest demonstrates prediction accuracy of 99.4% with 3 steps. Highest accuracy is achieved with 2 predictors.Accuracy by number of predictors plot shows there is not much change in accuracy with number of predictors between 2 to 27. But accouracy drastically falls down when number of predictors is larger than 27. This observation implies that there should be correlation between predictors.  
+
+### Train with Gradient Boosting
+
+```{r }
+model_GBM <- train(classe~., data=trainSubset, method="gbm", trControl=trControl, verbose=FALSE)
+print (model_GBM)
+plot(model_GBM)
+```
+
+#### Prediction with Gradient Boosting
+
+```{r }
+predictGBM <- predict(model_GBM,newdata=trainTest)
+confusionMatrixGBM <- confusionMatrix(trainTest$classe,predictGBM)
+confusionMatrixGBM$table
+confusionMatrixGBM$overall[1]
+```
+
+Prediction accuracy with Gradient Boosting comes out to be 95.8%.
+
+
+Since Random Forest has greater accuracy than Gradient Boosting, Randon Forest is selected as the final model to be used for prediction.
+
+## Model Output on Test Data
+
+```{r }
+predictFinal <- predict(model_RF,newdata=testDataClean)
+print(predictFinal)
+```
+
+
